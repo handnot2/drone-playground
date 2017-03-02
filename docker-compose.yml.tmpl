@@ -1,0 +1,74 @@
+version: '2'
+
+services:
+  mydns:
+    image: gliderlabs/resolvable:master
+    hostname: mydns.try
+    domainname: try
+    network_mode: bridge
+    ports:
+      - "<DOCKER_BRIDGE_IP>:53:53/udp"
+    dns:
+      - <DEFAULT_NAMESERVER_IP>
+    volumes:
+      - /etc/resolv.conf:/tmp/resolv.conf
+      - /var/run/docker.sock:/tmp/docker.sock
+    restart: always
+
+  gitea:
+    image: gitea/gitea:1.0.2
+    hostname: gitea.try
+    domainname: try
+    network_mode: bridge
+    ports:
+      - "3000:3000"
+    volumes:
+      - ${HOME}/dpdv/gitea-dv:/data
+    depends_on:
+      - mydns
+    restart: always
+
+  minio:
+    image: minio/minio
+    hostname: minio.try
+    domainname: try
+    env_file:
+      - minio.env
+    network_mode: bridge
+    ports:
+      - "9000:9000"
+    volumes:
+      - ${HOME}/dpdv/minio-dv/export/minio1:/export
+      - ${HOME}/dpdv/minio-dv/config/minio1:/root/.minio
+    depends_on:
+      - gitea
+    command: server /export
+    restart: always
+
+  drone-server:
+    image: drone/drone:0.5
+    hostname: drone.try
+    domainname: try
+    privileged: true
+    env_file: drone-server.env
+    network_mode: bridge
+    ports:
+      - "8000:8000"
+    volumes:
+      - ${HOME}/dpdv/drone-dv:/var/lib/drone/
+    depends_on:
+      - gitea
+      - minio
+    restart: always
+
+  drone-agent:
+    image: drone/drone:0.5
+    privileged: true
+    env_file: drone-agent.env
+    network_mode: bridge
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - drone-server
+    command: agent
+    restart: always
